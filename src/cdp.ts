@@ -122,6 +122,38 @@ export class CDPClient {
     };
   }
 
+  async navigate(url: string, timeoutMs: number = 10000): Promise<{ url: string; title: string }> {
+    const client = await this.ensureConnected();
+
+    let done = false;
+    const loadFired = new Promise<void>((resolve) => {
+      const off = client.Page.loadEventFired(() => {
+        if (done) return;
+        done = true;
+        off?.();
+        resolve();
+      });
+    });
+    const timeout = new Promise<void>((resolve) => setTimeout(() => {
+      done = true;
+      resolve();
+    }, timeoutMs));
+
+    const nav = await client.Page.navigate({ url });
+    if (nav.errorText) {
+      throw new Error(`Navigation failed: ${nav.errorText}`);
+    }
+
+    await Promise.race([loadFired, timeout]);
+
+    const urlR = await client.Runtime.evaluate({ expression: "location.href" });
+    const titleR = await client.Runtime.evaluate({ expression: "document.title" });
+    return {
+      url: String(urlR.result.value ?? ""),
+      title: String(titleR.result.value ?? ""),
+    };
+  }
+
   async evalJs(expression: string): Promise<unknown> {
     const client = await this.ensureConnected();
     const result = await client.Runtime.evaluate({

@@ -31,6 +31,19 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
       },
     },
     {
+      name: "navigate",
+      description:
+        "Navigate the active tab to a URL. Waits for the page's load event (or up to timeoutMs). Essential when running a headless browser, since there's no UI to type a URL into. Returns the resolved URL and page title after load.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          url: { type: "string", description: "URL to navigate to (e.g. http://localhost:3000)." },
+          timeoutMs: { type: "number", description: "Max time to wait for load event (default 10000)." },
+        },
+        required: ["url"],
+      },
+    },
+    {
       name: "eval_js",
       description:
         "Evaluate a JavaScript expression in the active browser tab and return the result. Useful for inspecting state (`window.__REDUX_STORE__.getState()`), querying DOM (`document.querySelector('...').innerText`), or triggering actions (`document.querySelector('button').click()`). Top-level await is supported.",
@@ -93,6 +106,16 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
           content: [
             { type: "image", data: snap.screenshot, mimeType: "image/png" },
             { type: "text", text: summary },
+          ],
+        };
+      }
+
+      case "navigate": {
+        const { url, timeoutMs } = args as { url: string; timeoutMs?: number };
+        const result = await cdp.navigate(url, timeoutMs);
+        return {
+          content: [
+            { type: "text", text: `Navigated to: ${result.url}\nTitle: ${result.title}` },
           ],
         };
       }

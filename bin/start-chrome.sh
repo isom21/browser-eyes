@@ -11,7 +11,6 @@
 set -euo pipefail
 
 PORT="${BROWSER_EYES_PORT:-9222}"
-PROFILE="${BROWSER_EYES_PROFILE:-$HOME/.browser-eyes-profile}"
 
 CHROME="${BROWSER_EYES_BIN:-}"
 if [ -z "$CHROME" ]; then
@@ -31,15 +30,60 @@ if [ -z "$CHROME" ]; then
   exit 1
 fi
 
+# Headless mode: explicit via BROWSER_EYES_HEADLESS=1, or auto-enabled when
+# there's no display. Set BROWSER_EYES_HEADLESS=0 to force GUI mode.
+HEADLESS="${BROWSER_EYES_HEADLESS:-auto}"
+if [ "$HEADLESS" = "auto" ]; then
+  if [ -z "${DISPLAY:-}" ] && [ -z "${WAYLAND_DISPLAY:-}" ] && [ "$(uname)" != "Darwin" ]; then
+    HEADLESS=1
+  else
+    HEADLESS=0
+  fi
+fi
+
+HEADLESS_ARGS=()
+if [ "$HEADLESS" = "1" ]; then
+  # --headless=new is the post-2023 implementation, identical CDP surface to
+  # full Chrome. --disable-dev-shm-usage avoids crashes on hosts where
+  # /dev/shm is small (Docker default 64MB).
+  HEADLESS_ARGS=(
+    "--headless=new"
+    "--disable-gpu"
+    "--disable-dev-shm-usage"
+    "--window-size=${BROWSER_EYES_WINDOW:-1280,800}"
+  )
+fi
+
+# Resolve symlinks to detect snap-confined Chromium, which can only write
+# inside ~/snap/chromium/common/ — using a profile elsewhere fails with
+# "Failed to create .../SingletonLock: Permission denied".
+RESOLVED="$(readlink -f "$(command -v "$CHROME" 2>/dev/null || echo "$CHROME")" 2>/dev/null || echo "$CHROME")"
+IS_SNAP=0
+case "$CHROME$RESOLVED" in
+  *"/snap/"*) IS_SNAP=1 ;;
+esac
+
+if [ "$IS_SNAP" = 1 ]; then
+  DEFAULT_PROFILE="$HOME/snap/chromium/common/browser-eyes-profile"
+else
+  DEFAULT_PROFILE="$HOME/.browser-eyes-profile"
+fi
+PROFILE="${BROWSER_EYES_PROFILE:-$DEFAULT_PROFILE}"
+
 mkdir -p "$PROFILE"
 
 echo "Launching Chrome with remote debugging:"
-echo "  bin:     $CHROME"
-echo "  port:    $PORT"
-echo "  profile: $PROFILE"
+echo "  bin:      $CHROME"
+[ "$IS_SNAP" = 1 ] && echo "  (snap-confined; profile pinned to snap-writable path)"
+echo "  port:     $PORT"
+echo "  profile:  $PROFILE"
+echo "  headless: $([ "$HEADLESS" = 1 ] && echo yes || echo no)"
 echo
 
 exec "$CHROME" \
   --remote-debugging-port="$PORT" \
   --user-data-dir="$PROFILE" \
+  --no-first-run \
+  --no-default-browser-check \
+  "${HEADLESS_ARGS[@]}" \
   "$@"
