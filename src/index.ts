@@ -6,8 +6,34 @@ import {
   ListToolsRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
 import { CDPClient } from "./cdp.js";
+import { ChromeManager } from "./chrome-manager.js";
 
-const cdp = new CDPClient();
+const chrome = new ChromeManager();
+const cdp = new CDPClient(chrome);
+
+let shuttingDown = false;
+async function shutdown(reason: string, exitCode = 0): Promise<void> {
+  if (shuttingDown) return;
+  shuttingDown = true;
+  process.stderr.write(`[browser-eyes] shutting down (${reason})\n`);
+  try {
+    await cdp.close();
+  } catch (e) {
+    process.stderr.write(`[browser-eyes] cdp close: ${e}\n`);
+  }
+  try {
+    await chrome.shutdown();
+  } catch (e) {
+    process.stderr.write(`[browser-eyes] chrome shutdown: ${e}\n`);
+  }
+  process.exit(exitCode);
+}
+
+for (const sig of ["SIGINT", "SIGTERM", "SIGHUP"] as const) {
+  process.on(sig, () => void shutdown(sig));
+}
+// When Claude Code exits, our stdin closes — that's our cue.
+process.stdin.on("close", () => void shutdown("stdin closed"));
 
 const server = new Server(
   { name: "browser-eyes", version: "0.1.0" },
@@ -84,6 +110,12 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
         "Clear the console-message and network-error buffers. Useful before a step you want to observe in isolation (e.g. clear, click button, look).",
       inputSchema: { type: "object", properties: {} },
     },
+    {
+      name: "close_browser",
+      description:
+        "Shut down the Chrome instance the MCP spawned automatically. No-op if Chrome was started externally (e.g. by the user running start-chrome.sh) — that one stays up. Use this when you're done with the browser and want to free resources before the session ends; otherwise the MCP will close it on its own shutdown.",
+      inputSchema: { type: "object", properties: {} },
+    },
   ],
 }));
 
@@ -142,6 +174,22 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
       case "clear_buffers": {
         await cdp.clearBuffers();
         return { content: [{ type: "text", text: "Buffers cleared." }] };
+      }
+
+      case "close_browser": {
+        if (!chrome.ownsBrowser()) {
+          return {
+            content: [
+              {
+                type: "text",
+                text: "Chrome was started externally; leaving it alone. (Nothing to close.)",
+              },
+            ],
+          };
+        }
+        await cdp.close();
+        await chrome.shutdown();
+        return { content: [{ type: "text", text: "Spawned Chrome stopped." }] };
       }
 
       default:

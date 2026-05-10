@@ -18,6 +18,7 @@ and pasting; the agent just calls `look` whenever it wants to see what you see.
 | `list_tabs` | List open Chrome tabs. |
 | `select_tab` | Switch which tab the MCP is attached to. |
 | `clear_buffers` | Reset the console & network-error buffers. Useful before "click X then look". |
+| `close_browser` | Stop the Chrome the MCP spawned (no-op if Chrome was started externally). |
 
 The MCP keeps a rolling 200-entry buffer of console output and network errors
 in memory, so when the agent calls `look` it sees what *happened*, not just
@@ -41,8 +42,33 @@ claude mcp add browser-eyes node ~/browser-eyes/dist/index.js
 
 ## Running Chrome
 
-You need Chrome running with the remote-debugging port enabled. Use the
-included helper:
+**The MCP manages Chrome's lifecycle automatically.** On the first tool
+call it checks whether CDP is reachable; if not, it spawns Chrome via
+`bin/start-chrome.sh` (headless on dev hosts, GUI on desktops). When the
+MCP shuts down — Claude Code exits, conversation ends, signal received —
+it stops Chrome again. So in most cases you can just register the MCP
+and forget Chrome exists.
+
+```bash
+# (after npm install && npm run build)
+claude mcp add browser-eyes node ~/browser-eyes/dist/index.js
+# done — the agent's first look/navigate call will spawn Chrome
+```
+
+The MCP only stops a Chrome it spawned itself. If you started Chrome
+manually (e.g. via `bin/start-chrome.sh`) the MCP attaches to that one
+and leaves it running on shutdown. The `close_browser` tool lets the
+agent end the spawned Chrome early; it's a no-op against an externally-
+managed Chrome.
+
+To disable auto-spawn (and require Chrome to be already running), set
+`BROWSER_EYES_AUTO_SPAWN=0`.
+
+### Manual launching
+
+You can still drive Chrome yourself with the included helper — useful for
+debugging, or for a long-running Chrome you want to keep across many
+Claude Code sessions:
 
 ```bash
 ~/browser-eyes/bin/start-chrome.sh
@@ -57,13 +83,28 @@ If you'd rather use your normal Chrome, fully quit it and relaunch with
 `--remote-debugging-port=9222`. **Don't expose this port to the internet** —
 it gives full control of your browser. Localhost only.
 
+The launcher backgrounds Chrome by default, redirects all of Chrome's
+noisy output to a logfile, and returns control to your shell as soon as
+the debug port is reachable. Useful flags:
+
+| Flag | Effect |
+|---|---|
+| (none) | Start in the background. Pidfile + log under `$PROFILE/`. |
+| `--foreground` | Attach Chrome to the current terminal (old behavior). |
+| `--stop` | Stop the Chrome this script started. |
+| `--status` | Report whether our Chrome is running. |
+| `--help` | Show usage. |
+
+A second `start-chrome.sh` while one is already running refuses cleanly
+instead of fighting over the port.
+
 ### Headless mode (recommended for remote dev hosts)
 
 If you're working on a headless dev host (no X server, no `$DISPLAY`),
 the launcher auto-enables `--headless=new`:
 
 ```bash
-~/browser-eyes/bin/start-chrome.sh &
+~/browser-eyes/bin/start-chrome.sh
 # headless: yes  — runs in the background, no UI, full CDP available
 ```
 
@@ -107,6 +148,8 @@ problem.
 | `BROWSER_EYES_PORT` | `9222` | Chrome's `--remote-debugging-port`. |
 | `BROWSER_EYES_PROFILE` | `~/.browser-eyes-profile` (or `~/snap/chromium/common/browser-eyes-profile` on snap) | Profile dir used by `start-chrome.sh`. |
 | `BROWSER_EYES_BIN` | autodetect | Path to the Chrome/Chromium binary. |
+| `BROWSER_EYES_AUTO_SPAWN` | `1` | `0` to disable auto-spawning Chrome from the MCP. |
+| `BROWSER_EYES_LAUNCHER` | `<repo>/bin/start-chrome.sh` | Path to the launcher script the MCP shells out to. |
 
 ### Browser on a different machine than Claude Code
 

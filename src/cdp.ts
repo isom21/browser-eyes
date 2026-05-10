@@ -1,4 +1,5 @@
 import CDP from "chrome-remote-interface";
+import type { ChromeManager } from "./chrome-manager.js";
 
 export interface Snapshot {
   screenshot: string;
@@ -17,9 +18,21 @@ export class CDPClient {
   private readonly host: string;
   private readonly port: number;
 
-  constructor() {
+  constructor(private chrome: ChromeManager) {
     this.host = process.env.BROWSER_EYES_HOST || "localhost";
     this.port = parseInt(process.env.BROWSER_EYES_PORT || "9222", 10);
+  }
+
+  async close(): Promise<void> {
+    if (this.client) {
+      try {
+        await this.client.close();
+      } catch {
+        /* ignore */
+      }
+      this.client = null;
+    }
+    this.targetId = null;
   }
 
   private async pickFirstPageTarget(): Promise<string> {
@@ -35,6 +48,8 @@ export class CDPClient {
 
   private async ensureConnected(): Promise<CDP.Client> {
     if (this.client) return this.client;
+
+    await this.chrome.ensureRunning();
 
     if (!this.targetId) {
       this.targetId = await this.pickFirstPageTarget();
