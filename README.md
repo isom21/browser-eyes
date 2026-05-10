@@ -40,6 +40,17 @@ claude mcp add browser-eyes node ~/browser-eyes/dist/index.js
 
 (Use `--scope user` to make it available across all projects.)
 
+### How the agent should use it
+
+Hint Claude Code, e.g. via project `CLAUDE.md`:
+
+> When working on the web UI, use the `look` tool from the `browser-eyes` MCP
+> to see the current state of my browser. Call it after each visible change
+> and whenever you suspect a console error.
+
+That single nudge is usually enough; the tool description tells Claude what
+each call returns.
+
 ## Running Chrome
 
 **The MCP manages Chrome's lifecycle automatically.** On the first tool
@@ -198,16 +209,6 @@ You'll also need to launch Chrome with
 `--remote-debugging-address=127.0.0.1` and a port-proxy, OR use SSH-style
 forwarding. Easiest: just run Chrome inside WSL.
 
-## How the agent should use it
-
-Hint Claude Code, e.g. via project `CLAUDE.md`:
-
-> When working on the web UI, use the `look` tool from the `browser-eyes` MCP
-> to see the current state of my browser. Call it after each visible change
-> and whenever you suspect a console error.
-
-That single nudge is usually enough; the tool description tells Claude what
-each call returns.
 
 ## Background
 
