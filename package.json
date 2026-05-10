@@ -1,0 +1,23 @@
+{
+  "name": "browser-eyes",
+  "version": "0.1.0",
+  "description": "MCP server giving Claude Code one-shot access to your live Chrome tab: screenshot + URL + recent console + recent network errors.",
+  "type": "module",
+  "bin": {
+    "browser-eyes": "dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "tsc --watch"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.0",
+    "chrome-remote-interface": "^0.33.0"
+  },
+  "devDependencies": {
+    "@types/chrome-remote-interface": "^0.33.0",
+    "@types/node": "^22.0.0",
+    "typescript": "^5.5.0"
+  }
+}
